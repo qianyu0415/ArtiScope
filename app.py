@@ -1,4 +1,5 @@
 import os
+from flask_cors import CORS
 from flask import Flask, request, jsonify, session
 from dotenv import load_dotenv
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -15,10 +16,16 @@ import time
 
 app = Flask(__name__)
 
+# 配置 CORS，允许 localhost:5173 访问，支持凭据
+CORS(app, supports_credentials=True, resources={r"/*": {"origins": "http://localhost:5173"}})
+
 # --- 数据库配置 ---
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'mysql+pymysql://root:123456@localhost/ArtiScope')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-very-secure-and-long-secret-key-here')
+
+app.config['SESSION_COOKIE_SECURE'] = True # 启用 HTTPS 安全 cookie
+app.config['SESSION_COOKIE_SAMESITE'] = 'None' # 允许跨站请求
 
 db = SQLAlchemy(app)
 load_dotenv()
@@ -476,4 +483,4 @@ if __name__ == '__main__':
     else:
         print("阿里云 OSS 配置加载成功。")
         
-    app.run(debug=True, port=5000)
+    app.run(debug=True, port=8088)
