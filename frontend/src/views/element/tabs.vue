@@ -1,27 +1,27 @@
 <template>
   <el-tabs v-model="activeTab" type="card">
-    <!-- 图片栏 -->
-    <el-tab-pane label="图片" name="images">
+    <!-- ASCII图片栏 -->
+    <el-tab-pane label="ASCII图片" name="ascii-images">
       <div class="search-container">
         <el-input
-          v-model="imageSearch"
-          placeholder="搜索图片标题"
+          v-model="asciiImageSearch"
+          placeholder="搜索ASCII图片标题"
           clearable
-          @clear="handleSearchClear"
-          @keyup.enter="handleSearch"
+          @clear="handleAsciiSearchClear"
+          @keyup.enter="handleAsciiSearch"
         >
           <template #append>
-            <el-button :icon="Search" @click="handleSearch" />
+            <el-button :icon="Search" @click="handleAsciiSearch" />
           </template>
         </el-input>
       </div>
       
       <el-table 
-        :data="filteredImages" 
+        :data="filteredAsciiImages" 
         :show-header="false" 
         style="width: 100%"
-        v-loading="loading"
-        empty-text="暂无图片数据"
+        v-loading="asciiLoading"
+        empty-text="暂无ASCII图片数据"
       >
         <el-table-column>
           <template #default="scope">
@@ -41,7 +41,7 @@
               <el-button 
                 size="small" 
                 type="primary" 
-                @click="downloadMedia(scope.row.output_oss_url, scope.row.input_token || 'image')"
+                @click="downloadMedia(scope.row.output_oss_url, scope.row.input_token || 'ascii-image')"
                 class="download-btn"
               >
                 下载
@@ -53,14 +53,79 @@
       
       <div class="pagination-container">
         <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :total="totalImages"
+          v-model:current-page="asciiCurrentPage"
+          v-model:page-size="asciiPageSize"
+          :total="asciiTotalImages"
           :page-sizes="[10, 20, 50, 100]"
           layout="sizes, prev, pager, next, jumper"
           background
-          @size-change="fetchImageLogs"
-          @current-change="fetchImageLogs"
+          @size-change="fetchAsciiImageLogs"
+          @current-change="fetchAsciiImageLogs"
+        />
+      </div>
+    </el-tab-pane>
+    
+    <!-- 文生图图片栏 -->
+    <el-tab-pane label="文生图图片" name="text-to-images">
+      <div class="search-container">
+        <el-input
+          v-model="textImageSearch"
+          placeholder="搜索文生图提示词"
+          clearable
+          @clear="handleTextImageSearchClear"
+          @keyup.enter="handleTextImageSearch"
+        >
+          <template #append>
+            <el-button :icon="Search" @click="handleTextImageSearch" />
+          </template>
+        </el-input>
+      </div>
+      
+      <el-table 
+        :data="filteredTextImages" 
+        :show-header="false" 
+        style="width: 100%"
+        v-loading="textImageLoading"
+        empty-text="暂无文生图图片数据"
+      >
+        <el-table-column>
+          <template #default="scope">
+            <div class="media-item">
+              <el-image
+                :src="scope.row.generated_image_oss_url"
+                fit="cover"
+                class="media-thumbnail"
+                :preview-src-list="[scope.row.generated_image_oss_url]"
+                preview-teleported
+                hide-on-click-modal
+              />
+              <div class="media-info">
+                <span class="media-title">{{ scope.row.prompt || '未命名图片' }}</span>
+                <span class="media-date">{{ formatDate(scope.row.created_at) }}</span>
+              </div>
+              <el-button 
+                size="small" 
+                type="primary" 
+                @click="downloadMedia(scope.row.generated_image_oss_url, scope.row.prompt || 'text-to-image')"
+                class="download-btn"
+              >
+                下载
+              </el-button>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+      
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="textImageCurrentPage"
+          v-model:page-size="textImagePageSize"
+          :total="textImageTotalImages"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="sizes, prev, pager, next, jumper"
+          background
+          @size-change="fetchTextToImageLogs"
+          @current-change="fetchTextToImageLogs"
         />
       </div>
     </el-tab-pane>
@@ -135,16 +200,26 @@
 import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
-import { getImageLogs } from '@/api/image'; // 根据实际路径调整
+import { getImageLogs, getTextToImageLogs } from '@/api/image';
 
-// 定义图片项接口
-interface ImageItem {
+// 定义ASCII图片项接口
+interface AsciiImageItem {
   id: number;
   user_id: number;
   username: string;
   input_oss_url: string;
   input_token: string;
   output_oss_url: string;
+  created_at: string;
+  updated_at: string;
+}
+
+// 定义文生图图片项接口
+interface TextImageItem {
+  id: number;
+  user_id: number;
+  prompt: string;
+  generated_image_oss_url: string;
   created_at: string;
   updated_at: string;
 }
@@ -158,22 +233,30 @@ interface VideoItem {
 }
 
 // 活跃标签页
-const activeTab = ref('images');
+const activeTab = ref('ascii-images');
 
 // 搜索关键词
-const imageSearch = ref('');
+const asciiImageSearch = ref('');
+const textImageSearch = ref('');
 const videoSearch = ref('');
 
-// 分页相关
-const currentPage = ref(1);
-const pageSize = ref(2);
-const totalImages = ref(0);
-const loading = ref(false);
+// ASCII图片分页相关
+const asciiCurrentPage = ref(1);
+const asciiPageSize = ref(2);
+const asciiTotalImages = ref(0);
+const asciiLoading = ref(false);
+
+// 文生图图片分页相关
+const textImageCurrentPage = ref(1);
+const textImagePageSize = ref(2);
+const textImageTotalImages = ref(0);
+const textImageLoading = ref(false);
 
 // 图片数据
-const imageLogs = ref<ImageItem[]>([]);
+const asciiImageLogs = ref<AsciiImageItem[]>([]);
+const textImageLogs = ref<TextImageItem[]>([]);
 
-// 视频数据（示例数据，可根据需要替换为API获取）
+// 视频数据
 const videoLogs = ref<VideoItem[]>([
   {
     id: '1',
@@ -189,33 +272,67 @@ const videoLogs = ref<VideoItem[]>([
   }
 ]);
 
-// 获取图片处理记录
-const fetchImageLogs = async () => {
+// 获取ASCII图片处理记录
+const fetchAsciiImageLogs = async () => {
+  asciiLoading.value = true;
   try {
     const response = await getImageLogs({
-      page: currentPage.value,
-      per_page: pageSize.value,
+      page: asciiCurrentPage.value,
+      per_page: asciiPageSize.value,
     });
     
     if (response.status === 200) {
-      imageLogs.value = response.data.logs || [];
-      totalImages.value = response.data.total_logs || 0;
-      // Ensure currentPage is within valid range
-      if (response.data.total_pages && currentPage.value > response.data.total_pages) {
-        currentPage.value = response.data.total_pages || 1;
-        await fetchImageLogs(); // Re-fetch with corrected page
+      asciiImageLogs.value = response.data.logs || [];
+      asciiTotalImages.value = response.data.total_logs || 0;
+      if (response.data.total_pages && asciiCurrentPage.value > response.data.total_pages) {
+        asciiCurrentPage.value = response.data.total_pages || 1;
+        await fetchAsciiImageLogs();
       }
     } else {
-      throw new Error('获取日志失败');
+      throw new Error('获取ASCII图片日志失败');
     }
   } catch (error: any) {
-    console.error('获取日志错误:', error);
-    const message = error.response?.data?.message || '获取日志失败，请重试';
+    console.error('获取ASCII图片日志错误:', error);
+    const message = error.response?.data?.message || '获取ASCII图片日志失败，请重试';
     if (error.response?.status === 401) {
       ElMessage.error('未授权访问，请先登录');
     } else {
       ElMessage.error(message);
     }
+  } finally {
+    asciiLoading.value = false;
+  }
+};
+
+// 获取文生图图片处理记录
+const fetchTextToImageLogs = async () => {
+  textImageLoading.value = true;
+  try {
+    const response = await getTextToImageLogs({
+      page: textImageCurrentPage.value,
+      per_page: textImagePageSize.value,
+    });
+    
+    if (response.status === 200) {
+      textImageLogs.value = response.data.data || [];
+      textImageTotalImages.value = response.data.pagination.total || 0;
+      if (response.data.pagination.pages && textImageCurrentPage.value > response.data.pagination.pages) {
+        textImageCurrentPage.value = response.data.pagination.pages || 1;
+        await fetchTextToImageLogs();
+      }
+    } else {
+      throw new Error('获取文生图图片日志失败');
+    }
+  } catch (error: any) {
+    console.error('获取文生图图片日志错误:', error);
+    const message = error.response?.data?.message || '获取文生图图片日志失败，请重试';
+    if (error.response?.status === 401) {
+      ElMessage.error('未授权访问，请先登录');
+    } else {
+      ElMessage.error(message);
+    }
+  } finally {
+    textImageLoading.value = false;
   }
 };
 
@@ -229,23 +346,43 @@ const formatDate = (dateString: string) => {
   }
 };
 
-// 处理搜索
-const handleSearch = () => {
-  currentPage.value = 1;
-  fetchImageLogs();
+// 处理ASCII图片搜索
+const handleAsciiSearch = () => {
+  asciiCurrentPage.value = 1;
+  fetchAsciiImageLogs();
 };
 
-// 处理搜索框清除
-const handleSearchClear = () => {
-  imageSearch.value = '';
-  handleSearch();
+// 处理ASCII图片搜索框清除
+const handleAsciiSearchClear = () => {
+  asciiImageSearch.value = '';
+  handleAsciiSearch();
 };
 
-// 过滤图片
-const filteredImages = computed(() => {
-  if (!imageSearch.value) return imageLogs.value;
-  return imageLogs.value.filter(item => 
-    (item.input_token || '').toLowerCase().includes(imageSearch.value.toLowerCase())
+// 处理文生图图片搜索
+const handleTextImageSearch = () => {
+  textImageCurrentPage.value = 1;
+  fetchTextToImageLogs();
+};
+
+// 处理文生图图片搜索框清除
+const handleTextImageSearchClear = () => {
+  textImageSearch.value = '';
+  handleTextImageSearch();
+};
+
+// 过滤ASCII图片
+const filteredAsciiImages = computed(() => {
+  if (!asciiImageSearch.value) return asciiImageLogs.value;
+  return asciiImageLogs.value.filter(item => 
+    (item.input_token || '').toLowerCase().includes(asciiImageSearch.value.toLowerCase())
+  );
+});
+
+// 过滤文生图图片
+const filteredTextImages = computed(() => {
+  if (!textImageSearch.value) return textImageLogs.value;
+  return textImageLogs.value.filter(item => 
+    (item.prompt || '').toLowerCase().includes(textImageSearch.value.toLowerCase())
   );
 });
 
@@ -260,24 +397,16 @@ const filteredVideos = computed(() => {
 // 下载媒体文件
 const downloadMedia = async (url: string, title: string) => {
   try {
-    // 创建一个隐藏的a标签
     const link = document.createElement('a');
     link.href = url;
-    
-    // 从URL中提取文件名
     const fileName = url.split('/').pop()?.split('?')[0] || 'download';
     const fileExt = fileName.split('.').pop() || 'jpg';
-    
-    // 设置下载属性
     link.download = `${title}.${fileExt}`;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
-    
-    // 触发点击
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-    
     ElMessage.success('下载已开始');
   } catch (error) {
     ElMessage.error('下载失败，请检查 URL 或网络');
@@ -301,7 +430,8 @@ const closeVideoDialog = () => {
 
 // 初始化时获取图片记录
 onMounted(() => {
-  fetchImageLogs();
+  fetchAsciiImageLogs();
+  fetchTextToImageLogs();
 });
 </script>
 

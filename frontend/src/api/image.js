@@ -10,3 +10,7 @@ export const uploadImage = (formData) => instance.post('/log_image_process', for
 });
 
 export const getImageLogs = (params) => instance.get('/image_process_logs', { params });
+
+export const generateImageFromText = (prompt) => instance.post('/generate_image_from_text', { prompt });
+
+export const getTextToImageLogs = (params) => instance.get('/text_to_image_logs', { params });
