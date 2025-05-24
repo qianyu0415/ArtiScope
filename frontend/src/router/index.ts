@@ -21,7 +21,7 @@ const routes: RouteRecordRaw[] = [
                     title: '文生图对话',
                     permiss: '11',
                 },
-                component: () => import(/* webpackChunkName: "system-user" */ '../views/system/text-to-image.vue'),
+                component: () => import(/* webpackChunkName: "text-to-image" */ '../views/system/text-to-image.vue'),
             },
             {
                 path: '/image-to-image',
@@ -30,7 +30,7 @@ const routes: RouteRecordRaw[] = [
                     title: '图片转换',
                     permiss: '12',
                 },
-                component: () => import(/* webpackChunkName: "system-role" */ '../views/system/image-to-image.vue'),
+                component: () => import(/* webpackChunkName: "image-to-image" */ '../views/system/image-to-image.vue'),
             },
             {
                 path: '/video-to-video',
@@ -39,7 +39,7 @@ const routes: RouteRecordRaw[] = [
                     title: '视频转换',
                     permiss: '13',
                 },
-                component: () => import(/* webpackChunkName: "system-menu" */ '../views/system/video-to-video.vue'),
+                component: () => import(/* webpackChunkName: "video-to-video" */ '../views/system/video-to-video.vue'),
             },
             {
                 path: '/ucenter',
@@ -48,6 +48,30 @@ const routes: RouteRecordRaw[] = [
                     title: '个人中心',
                 },
                 component: () => import(/* webpackChunkName: "ucenter" */ '../views/pages/ucenter.vue'),
+            },
+            {
+                path: '/community',
+                name: 'community',
+                meta: {
+                    title: '社区',
+                },
+                component: () => import(/* webpackChunkName: "community" */ '../views/system/communityfeed.vue'),
+            },
+            {
+                path: '/myposts',
+                name: 'myposts',
+                meta: {
+                    title: '我的帖子',
+                },
+                component: () => import(/* webpackChunkName: "myposts" */ '../views/system/myposts.vue'),
+            },
+            {
+                path: '/postcreator',
+                name: 'postcreator',
+                meta: {
+                    title: '发表',
+                },
+                component: () => import(/* webpackChunkName: "community" */ '../views/system/postcreator.vue'),
             },
         ],
     },
