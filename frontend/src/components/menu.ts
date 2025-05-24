@@ -3,7 +3,7 @@ import { Menus } from '@/types/menu';
 export const menuData: Menus[] = [
     {
         id: '1',
-        title: 'ASCII generator',
+        title: 'ArtiScope Generator',
         index: '1',
         icon: 'HomeFilled',
         children: [

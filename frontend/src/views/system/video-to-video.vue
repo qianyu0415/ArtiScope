@@ -15,16 +15,41 @@
       </div>
     </div>
 
-    <!-- 中间：选择视频和转换按钮 -->
+    <!-- 中间：选择视频、参数和转换按钮 -->
     <div class="center-panel">
       <el-input
-        v-model="userInput"
+        v-model="token"
         type="textarea"
         :rows="1"
         placeholder="请输入编码词（可选）"
         style="width: 90%;"
       />
-
+      <el-form label-position="top" style="width: 90%; margin-top: 20px;">
+        <el-form-item label="背景颜色">
+          <el-select v-model="options.background" placeholder="选择背景颜色">
+            <el-option label="黑色" value="black" />
+            <el-option label="白色" value="white" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="模式">
+          <el-select v-model="options.mode" placeholder="选择模式">
+            <el-option label="简单" value="simple" />
+            <el-option label="复杂" value="complex" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="输出宽度字符数">
+          <el-input-number v-model="options.num_cols" :min="10" :max="2000" />
+        </el-form-item>
+        <el-form-item label="缩放比例">
+          <el-input-number v-model="options.scale" :min="1" :max="10" />
+        </el-form-item>
+        <el-form-item label="帧率 (FPS)">
+          <el-input-number v-model="options.fps" :min="0" :max="60" />
+        </el-form-item>
+        <el-form-item label="叠加比例">
+          <el-input-number v-model="options.overlay_ratio" :min="0" :max="1" :step="0.1" />
+        </el-form-item>
+      </el-form>
       <el-upload
         ref="uploadRef"
         class="upload-demo"
@@ -33,8 +58,9 @@
         :on-remove="handleVideoRemove"
         :auto-upload="false"
         accept="video/*"
+        :file-list="fileList"
       >
-        <el-button type="primary" :icon="UploadFilled" style="margin-top: 50px">选择视频</el-button>
+        <el-button type="primary" :icon="UploadFilled" style="margin-top: 20px">选择视频</el-button>
         <template #tip>
           <div class="el-upload__tip">仅支持视频文件，单次上传</div>
         </template>
@@ -42,7 +68,7 @@
       <el-button
         type="primary"
         size="large"
-        :disabled="!originalVideo"
+        :disabled="!originalVideo || fileList.length === 0"
         @click="handleTransform"
         :loading="isTransforming"
       >
@@ -68,52 +94,82 @@
 </template>
 
 <script setup lang="ts" name="video-to-video">
-import { ref } from 'vue';
+import { ref, reactive } from 'vue';
 import { ElMessage } from 'element-plus';
 import { UploadFilled } from '@element-plus/icons-vue';
+import { uploadVideo } from '@/api/image';
 
-// 原始视频和转换后视频的 URL
 const originalVideo = ref(null);
 const transformedVideo = ref(null);
 const uploadRef = ref(null);
 const isTransforming = ref(false);
+const token = ref('');
+const fileList = ref([]); // 跟踪上传文件列表
+const options = ref({
+  background: 'black',
+  mode: 'simple',
+  num_cols: 1080,
+  scale: 1,
+  fps: 30,
+  overlay_ratio: 0.5
+});
 
-// 处理视频选择
-const handleVideoChange = (file) => {
-  uploadRef.value.clearFiles(); // 清空之前的文件列表，确保替换
+const handleVideoChange = (file, uploadFiles) => {
+  console.log('File selected:', file);
+  console.log('Upload files:', uploadFiles);
   if (file.raw && file.raw.type.startsWith('video/')) {
     originalVideo.value = URL.createObjectURL(file.raw);
-    transformedVideo.value = null; // 清除转换后的视频
+    transformedVideo.value = null;
+    fileList.value = [file]; // 更新 fileList
   } else {
     ElMessage.error('请选择有效的视频文件！');
+    fileList.value = [];
+    if (uploadRef.value) {
+      uploadRef.value.clearFiles();
+    }
+  }
+};
+
+const handleVideoRemove = () => {
+  originalVideo.value = null;
+  transformedVideo.value = null;
+  fileList.value = [];
+  if (uploadRef.value) {
     uploadRef.value.clearFiles();
   }
 };
 
-// 处理视频移除
-const handleVideoRemove = () => {
-  originalVideo.value = null;
-  transformedVideo.value = null;
-};
-
-// 处理视频转换
 const handleTransform = async () => {
-  if (!originalVideo.value) return;
+  if (!originalVideo.value) {
+    ElMessage.error('请先选择视频文件！');
+    return;
+  }
+
+  if (!fileList.value.length) {
+    ElMessage.error('未找到上传的视频文件！');
+    return;
+  }
 
   isTransforming.value = true;
-  
+  const formData = new FormData();
+  formData.append('file', fileList.value[0].raw);
+  formData.append('token', token.value);
+  formData.append('background', options.value.background);
+  formData.append('mode', options.value.mode);
+  formData.append('num_cols', options.value.num_cols.toString());
+  formData.append('scale', options.value.scale.toString());
+  formData.append('fps', options.value.fps.toString());
+  formData.append('overlay_ratio', options.value.overlay_ratio.toString());
+
   try {
-    // 这里应该是实际的视频转换逻辑
-    // 模拟转换过程
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    
-    // 实际应用中，这里应该调用API或使用FFmpeg等工具进行视频转换
-    // 这里只是模拟，使用相同的视频URL
-    transformedVideo.value = originalVideo.value;
-    
+    const response = await uploadVideo(formData);
+    if (!response.data || !response.data.processed_video_url) {
+      throw new Error('后端响应缺少 processed_video_url');
+    }
+    transformedVideo.value = response.data.processed_video_url;
     ElMessage.success('视频转换成功！');
   } catch (error) {
-    ElMessage.error('视频转换失败: ' + error.message);
+    ElMessage.error('视频转换失败: ' + (error.response?.data?.message || error.message));
   } finally {
     isTransforming.value = false;
   }
@@ -138,11 +194,10 @@ const handleTransform = async () => {
 }
 
 .center-panel {
-  width: 250px; /* 加宽以适应输入框 */
+  width: 300px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center; /* 从顶部开始排列 */
   gap: 20px;
   padding: 20px;
 }

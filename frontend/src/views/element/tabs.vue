@@ -131,15 +131,17 @@
     </el-tab-pane>
     
     <!-- 视频栏 -->
-    <el-tab-pane label="视频" name="videos">
+    <el-tab-pane label="ASCII视频" name="videos">
       <div class="search-container">
         <el-input
           v-model="videoSearch"
           placeholder="搜索视频标题"
           clearable
+          @clear="handleVideoSearchClear"
+          @keyup.enter="handleVideoSearch"
         >
           <template #append>
-            <el-button :icon="Search" />
+            <el-button :icon="Search" @click="handleVideoSearch" />
           </template>
         </el-input>
       </div>
@@ -148,33 +150,55 @@
         :data="filteredVideos" 
         :show-header="false" 
         style="width: 100%"
+        v-loading="videoLoading"
         empty-text="暂无视频数据"
       >
         <el-table-column>
           <template #default="scope">
             <div class="media-item">
               <video
-                :src="scope.row.url"
+                :src="scope.row.output_oss_url"
                 controls
                 class="media-thumbnail"
-                @click="openFullScreenVideo(scope.row.url)"
+                @click="openFullScreenVideo(scope.row.output_oss_url)"
               ></video>
               <div class="media-info">
-                <span class="media-title">{{ scope.row.title }}</span>
-                <span class="media-date">{{ scope.row.date }}</span>
+                <span class="media-title">{{ scope.row.input_token || '未命名视频' }}</span>
+                <span class="media-date">{{ formatDate(scope.row.created_at) }}</span>
               </div>
               <el-button 
                 size="small" 
                 type="primary" 
-                @click="downloadMedia(scope.row.url, scope.row.title)"
+                @click="downloadMedia(scope.row.output_oss_url, scope.row.input_token || 'ascii-video')"
                 class="download-btn"
               >
                 下载
+              </el-button>
+              <el-button 
+                size="small" 
+                type="info" 
+                @click="openFullScreenVideo(scope.row.input_oss_url)"
+                class="download-btn"
+              >
+                预览原始视频
               </el-button>
             </div>
           </template>
         </el-table-column>
       </el-table>
+      
+      <div class="pagination-container">
+        <el-pagination
+          v-model:current-page="videoCurrentPage"
+          v-model:page-size="videoPageSize"
+          :total="videoTotalItems"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="sizes, prev, pager, next, jumper"
+          background
+          @size-change="fetchVideoLogs"
+          @current-change="fetchVideoLogs"
+        />
+      </div>
     </el-tab-pane>
   </el-tabs>
 
@@ -200,7 +224,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { ElMessage } from 'element-plus';
 import { Search } from '@element-plus/icons-vue';
-import { getImageLogs, getTextToImageLogs } from '@/api/image';
+import { getImageLogs, getTextToImageLogs, getVideoLogs } from '@/api/image';
 
 // 定义ASCII图片项接口
 interface AsciiImageItem {
@@ -226,10 +250,14 @@ interface TextImageItem {
 
 // 定义视频项接口
 interface VideoItem {
-  id: string;
-  title: string;
-  url: string;
-  date: string;
+  id: number;
+  user_id: number;
+  username: string;
+  input_oss_url: string;
+  input_token: string;
+  output_oss_url: string;
+  created_at: string;
+  updated_at: string;
 }
 
 // 活跃标签页
@@ -252,25 +280,16 @@ const textImagePageSize = ref(2);
 const textImageTotalImages = ref(0);
 const textImageLoading = ref(false);
 
-// 图片数据
+// 视频分页相关
+const videoCurrentPage = ref(1);
+const videoPageSize = ref(2);
+const videoTotalItems = ref(0);
+const videoLoading = ref(false);
+
+// 数据
 const asciiImageLogs = ref<AsciiImageItem[]>([]);
 const textImageLogs = ref<TextImageItem[]>([]);
-
-// 视频数据
-const videoLogs = ref<VideoItem[]>([
-  {
-    id: '1',
-    title: '示例视频1',
-    url: 'https://example.com/video1.mp4',
-    date: '2023-05-01'
-  },
-  {
-    id: '2',
-    title: '示例视频2',
-    url: 'https://example.com/video2.mp4',
-    date: '2023-05-02'
-  }
-]);
+const videoLogs = ref<VideoItem[]>([]);
 
 // 获取ASCII图片处理记录
 const fetchAsciiImageLogs = async () => {
@@ -336,6 +355,37 @@ const fetchTextToImageLogs = async () => {
   }
 };
 
+const fetchVideoLogs = async () => {
+  videoLoading.value = true;
+  try {
+    const response = await getVideoLogs({
+      page: videoCurrentPage.value,
+      per_page: videoPageSize.value,
+    });
+    
+    if (response.status === 200) {
+      videoLogs.value = response.data.logs || [];
+      videoTotalItems.value = response.data.total_logs || 0;
+      if (response.data.total_pages && videoCurrentPage.value > response.data.total_pages) {
+        videoCurrentPage.value = response.data.total_pages || 1;
+        await fetchVideoLogs();
+      }
+    } else {
+      throw new Error('获取视频日志失败');
+    }
+  } catch (error: any) {
+    console.error('获取视频日志错误:', error);
+    const message = error.response?.data?.message || '获取视频日志失败，请重试';
+    if (error.response?.status === 401) {
+      ElMessage.error('未授权访问，请先登录');
+    } else {
+      ElMessage.error(message);
+    }
+  } finally {
+    videoLoading.value = false;
+  }
+};
+
 // 格式化日期
 const formatDate = (dateString: string) => {
   try {
@@ -370,6 +420,18 @@ const handleTextImageSearchClear = () => {
   handleTextImageSearch();
 };
 
+// 处理视频搜索
+const handleVideoSearch = () => {
+  videoCurrentPage.value = 1;
+  fetchVideoLogs();
+};
+
+// 处理视频搜索框清除
+const handleVideoSearchClear = () => {
+  videoSearch.value = '';
+  handleVideoSearch();
+};
+
 // 过滤ASCII图片
 const filteredAsciiImages = computed(() => {
   if (!asciiImageSearch.value) return asciiImageLogs.value;
@@ -390,7 +452,7 @@ const filteredTextImages = computed(() => {
 const filteredVideos = computed(() => {
   if (!videoSearch.value) return videoLogs.value;
   return videoLogs.value.filter(item => 
-    item.title.toLowerCase().includes(videoSearch.value.toLowerCase())
+    (item.input_token || '').toLowerCase().includes(videoSearch.value.toLowerCase())
   );
 });
 
@@ -400,7 +462,7 @@ const downloadMedia = async (url: string, title: string) => {
     const link = document.createElement('a');
     link.href = url;
     const fileName = url.split('/').pop()?.split('?')[0] || 'download';
-    const fileExt = fileName.split('.').pop() || 'jpg';
+    const fileExt = fileName.split('.').pop() || 'mp4';
     link.download = `${title}.${fileExt}`;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
@@ -428,10 +490,11 @@ const closeVideoDialog = () => {
   currentVideoUrl.value = '';
 };
 
-// 初始化时获取图片记录
+// 初始化时获取所有记录
 onMounted(() => {
   fetchAsciiImageLogs();
   fetchTextToImageLogs();
+  fetchVideoLogs();
 });
 </script>
 
